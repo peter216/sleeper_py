@@ -323,21 +323,18 @@ class SleeperTUI(App):
     def on_mount(self):
         self.setup_navigation()
 
-        # Auto-refresh cache on first load or if it's Tuesday
-        if self.is_tuesday() or not self._has_cache():
-            self.action_refresh_data()
+        # Always auto-refresh cache on first load
+        self.action_refresh_data()
 
     def setup_navigation(self):
-        rootname = "Navigation"
+        # Hide the root and add items directly
         root = self.nav.root
-        root.label = rootname
-        # Add leaf nodes (allow_expand=False makes them selectable)
         root.add_leaf("League Info")
         root.add_leaf("Users")
         root.add_leaf("Rosters")
         root.add_leaf("Matchups")
-        root.add_leaf("Refresh Cache")
         root.expand()
+        self.nav.show_root = False
 
     def is_tuesday(self):
         return datetime.datetime.now().strftime("%A") == "Tuesday"
@@ -349,7 +346,7 @@ class SleeperTUI(App):
     # Navigation events ----------------------------------------------------
 
     def on_tree_node_selected(self, event: Tree.NodeSelected):
-        label = event.node.label
+        label = str(event.node.label)
 
         if label == "League Info":
             self.show_league()
@@ -359,8 +356,6 @@ class SleeperTUI(App):
             self.show_rosters()
         elif label == "Matchups":
             self.show_matchups_selector()
-        elif label == "Refresh Cache":
-            self.action_refresh_data()
 
     # Content rendering ----------------------------------------------------
 
