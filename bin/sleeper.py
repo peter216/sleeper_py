@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 
-import json
-import requests
+import argparse
 import datetime
+import json
 import pathlib
+import sys
 from typing import Optional
 
+import requests
 from textual.app import App, ComposeResult
-from textual.widgets import (
-    Header, Footer, Static, Tree, DataTable, Input, Button, Label, Select
-)
-from textual.containers import Container, Horizontal
-
+from textual.containers import Container, Horizontal, Vertical
+from textual.widgets import Button, DataTable, Footer, Header, Input, Label, Select, Static, Tree
 
 # --------------------------
 # Cache + API
@@ -59,36 +58,24 @@ def api_get(name: str, url: str, force: bool = False):
 # Sleeper API wrapper
 # --------------------------
 
+
 class SleeperAPI:
     def __init__(self, league_id: str):
+        assert int(league_id), "League ID must be an integer string"
         self.league_id = league_id
 
     def league(self, force=False):
-        return api_get(
-            f"league_{self.league_id}",
-            f"{BASE_URL}/league/{self.league_id}",
-            force
-        )
+        return api_get(f"league_{self.league_id}", f"{BASE_URL}/league/{self.league_id}", force)
 
     def users(self, force=False):
-        return api_get(
-            f"users_{self.league_id}",
-            f"{BASE_URL}/league/{self.league_id}/users",
-            force
-        )
+        return api_get(f"users_{self.league_id}", f"{BASE_URL}/league/{self.league_id}/users", force)
 
     def rosters(self, force=False):
-        return api_get(
-            f"rosters_{self.league_id}",
-            f"{BASE_URL}/league/{self.league_id}/rosters",
-            force
-        )
+        return api_get(f"rosters_{self.league_id}", f"{BASE_URL}/league/{self.league_id}/rosters", force)
 
     def matchups(self, week: int, force=False):
         return api_get(
-            f"matchups_{self.league_id}_week_{week}",
-            f"{BASE_URL}/league/{self.league_id}/matchups/{week}",
-            force
+            f"matchups_{self.league_id}_week_{week}", f"{BASE_URL}/league/{self.league_id}/matchups/{week}", force
         )
 
     def user(self, username: str):
@@ -101,20 +88,194 @@ class SleeperAPI:
 
 
 # --------------------------
-# Textual UI
+# League Lookup Screen
 # --------------------------
 
+
+class LeagueLookupScreen(App):
+    """Initial screen to get league ID."""
+
+    CSS = """
+    Vertical {
+        align: center middle;
+        width: 100%;
+        height: 100%;
+    }
+
+    Container {
+        width: 60;
+        height: auto;
+        border: solid $primary;
+        padding: 1 2;
+    }
+
+    Label {
+        margin: 1 0;
+    }
+
+    Input {
+        margin-bottom: 1;
+    }
+
+    Button {
+        margin: 1 0;
+        width: 100%;
+    }
+    """
+
+    BINDINGS = [("q", "quit", "Quit")]
+
+    def __init__(self, username: Optional[str] = None):
+        super().__init__()
+        self.username = username
+        self.api = SleeperAPI("0")  # Temporary API for user lookup
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Footer()
+        with Vertical():
+            with Container():
+                yield Label("Welcome to Sleeper Fantasy Football TUI", id="title")
+                yield Label("Choose how to find your league:")
+                yield Label("Option 1: Enter League ID")
+                yield Input(placeholder="League ID", id="league_id_input")
+                yield Button("Load by League ID", id="btn_load_id", variant="primary")
+                yield Label("Option 2: Search by Username")
+                yield Input(placeholder="Sleeper Username", id="username_input")
+                yield Input(placeholder="League Name (partial match)", id="league_name_input")
+                yield Button("Search Leagues", id="btn_search", variant="success")
+                yield Static("", id="status")
+
+    def on_mount(self):
+        # If league_id provided, load it directly
+        if self.league_id:
+            self._load_league(self.league_id)
+
+    def on_button_pressed(self, event: Button.Pressed):
+        if event.button.id == "btn_load_id":
+            league_id = self.query_one("#league_id_input", Input).value.strip()
+            if league_id:
+                self._load_league(league_id)
+            else:
+                self.query_one("#status", Static).update("Please enter a League ID")
+
+        elif event.button.id == "btn_search":
+            username = self.query_one("#username_input", Input).value.strip()
+            league_name = self.query_one("#league_name_input", Input).value.strip()
+            if username and league_name:
+                self._search_leagues(username, league_name)
+            else:
+                self.query_one("#status", Static).update("Please enter both username and league name")
+
+    def _load_league(self, league_id: str):
+        """Validate and load the league."""
+        try:
+            # Validate league ID
+            int(league_id)
+            # Test the API
+            test_api = SleeperAPI(league_id)
+            test_api.league()
+
+            # Success - exit and launch main app
+            self.league_id = league_id
+            self.exit(league_id)
+        except ValueError:
+            self.query_one("#status", Static).update("League ID must be numeric")
+        except Exception as e:
+            self.query_one("#status", Static).update(f"Error loading league: {str(e)}")
+
+    def _search_leagues(self, username: str, league_name: str):
+        """Search for leagues by username and name."""
+        status = self.query_one("#status", Static)
+        status.update("Searching...")
+
+        try:
+            # Step 1: find user
+            user_data = self.api.user(username)
+            user_id = user_data.get("user_id")
+            if not user_id:
+                status.update("Could not resolve user ID")
+                return
+
+            # Step 2: find user's leagues for current season
+            current_year = datetime.datetime.now().year
+            leagues = self.api.user_leagues(user_id, current_year)
+
+            # Step 3: filter by name
+            name_query = league_name.lower()
+            matches = [lg for lg in leagues if name_query in lg["name"].lower()]
+
+            if not matches:
+                status.update("No matching leagues found")
+                return
+
+            # Step 4: show results
+            self._show_search_results(matches)
+
+        except Exception as e:
+            status.update(f"Error: {str(e)}")
+
+    def _show_search_results(self, leagues):
+        """Display search results in a table."""
+        # Replace the form with results table
+        container = self.query_one(Vertical).query_one(Container)
+        container.remove()
+
+        new_container = Container()
+        new_container.mount(Label("Select a league:"))
+
+        table = DataTable(id="results_table")
+        table.add_column("League Name")
+        table.add_column("League ID")
+        table.add_column("Season")
+
+        for lg in leagues:
+            table.add_row(lg["name"], lg["league_id"], str(lg.get("season", "")))
+
+        new_container.mount(table)
+        new_container.mount(Button("Back", id="btn_back"))
+
+        self.query_one(Vertical).mount(new_container)
+
+        # Store leagues for selection
+        self._leagues = leagues
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected):
+        """Handle league selection from table."""
+        league = self._leagues[event.row_index]
+        self._load_league(league["league_id"])
+
+
+# --------------------------
+# Main Application
+# --------------------------
+
+
 class SleeperTUI(App):
-    CSS_PATH = None
+    CSS = """
+    #nav {
+        width: 30;
+        dock: left;
+    }
+
+    #content_container {
+        width: 1fr;
+    }
+
+    Horizontal {
+        height: 1fr;
+    }
+    """
+
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("r", "refresh_data", "Refresh Cache"),
     ]
 
-    def __init__(self, title, league_id: str=""):
+    def __init__(self, title, league_id: str):
         super().__init__()
-        if league_id:
-            self.api = SleeperAPI(league_id)
+        self.api = SleeperAPI(league_id)
+        self.league_id = league_id
         self.current_table = None
         self.week_select = None
 
@@ -128,8 +289,9 @@ class SleeperTUI(App):
             self.nav = Tree("Navigation", id="nav")
             yield self.nav
 
-            self.content = Static("Select an option from the left.", id="content")
-            yield self.content
+            # Use a container for content that we can replace children in
+            with Container(id="content_container"):
+                yield Static("Select an option from the left.", id="content")
 
     # App startup ----------------------------------------------------------
 
@@ -148,7 +310,7 @@ class SleeperTUI(App):
         root.add("Rosters")
         root.add("Matchups")
         root.add("Refresh Cache")
-        root.add("Lookup League By Name")
+        root.expand()
 
     def is_tuesday(self):
         return datetime.datetime.now().strftime("%A") == "Tuesday"
@@ -168,8 +330,6 @@ class SleeperTUI(App):
             self.show_matchups_selector()
         elif label == "Refresh Cache":
             self.action_refresh_data()
-        elif label == "Lookup League By Name":
-            self.lookup_league_by_name()
 
     # Content rendering ----------------------------------------------------
 
@@ -181,7 +341,7 @@ class SleeperTUI(App):
         for row in rows:
             table.add_row(*[str(x) for x in row])
 
-        self.content.update(table)
+        self._replace_content_widget(table)
 
     # View: League ---------------------------------------------------------
 
@@ -189,90 +349,6 @@ class SleeperTUI(App):
         data = self.api.league()
         rows = [(k, json.dumps(v)) for k, v in data.items()]
         self.show_table(rows, ["Field", "Value"])
-
-    def lookup_league_by_name(self):
-        """Ask for username + league name, then show matches."""
-        container = Container()
-
-        container.mount(Label("Enter Sleeper Username:"))
-        username_input = Input(placeholder="username")
-        container.mount(username_input)
-
-        container.mount(Label("Enter part of the League Name:"))
-        name_input = Input(placeholder="league name")
-        container.mount(name_input)
-
-        submit_btn = Button("Search", id="search_league_btn")
-        container.mount(submit_btn)
-
-        # Store fields so we can read them later
-        self._lookup_username = username_input
-        self._lookup_name = name_input
-
-        self.content.update(container)
-
-        # Bind button event
-        submit_btn.on_click = self._perform_league_lookup
-
-
-    def _perform_league_lookup(self, event):
-        username = self._lookup_username.value.strip()
-        name_query = self._lookup_name.value.strip().lower()
-
-        if not username or not name_query:
-            self.content.update("Both fields are required.")
-            return
-
-        # Step 1: find user
-        try:
-            user_data = self.api.user(username)
-        except:
-            self.content.update("User not found.")
-            return
-
-        user_id = user_data.get("user_id")
-        if not user_id:
-            self.content.update("Could not resolve user ID.")
-            return
-
-        # Step 2: find user's leagues for current season
-        current_year = datetime.datetime.now().year
-        leagues = self.api.user_leagues(user_id, current_year)
-
-        # Step 3: filter by name
-        matches = [lg for lg in leagues if name_query in lg["name"].lower()]
-
-        if not matches:
-            self.content.update("No matching leagues found.")
-            return
-
-        # Step 4: display matches and let user pick one
-        rows = [(lg["league_id"], lg["name"], lg.get("season", "")) for lg in matches]
-        table = DataTable()
-        table.add_column("League ID")
-        table.add_column("Name")
-        table.add_column("Season")
-
-        for row in rows:
-            table.add_row(*[str(x) for x in row])
-
-        # When user clicks a row, load that league into the dashboard
-        table.on_row_selected = self._select_league_from_search
-
-        self._search_results = matches
-        self.content.update(table)
-
-
-    def _select_league_from_search(self, event):
-        row_index = event.row_index
-        league = self._search_results[row_index]
-
-        # Switch app to use this league ID
-        self.api = SleeperAPI(league["league_id"])
-
-        self.content.update(
-            f"Loaded league: {league['name']} ({league['league_id']})"
-        )
 
     # View: Users ----------------------------------------------------------
 
@@ -308,13 +384,16 @@ class SleeperTUI(App):
 
     def show_matchups_selector(self):
         # interactive dropdown
+        container = Container()
         select = Select(
             options=[(str(i), i) for i in range(1, 19)],
             prompt="Select Week",
         )
         select.on_change = self._on_week_selected
-        self.content.update(select)
+        container.mount(select)
         self.week_select = select
+
+        self._replace_content_widget(container)
 
     def _on_week_selected(self, event):
         week = int(event.value)
@@ -340,7 +419,7 @@ class SleeperTUI(App):
 
     def action_refresh_data(self):
         try:
-            self.content.update("Refreshing cache…")
+            self._replace_content_text("Refreshing cache…")
 
             self.api.league(force=True)
             self.api.users(force=True)
@@ -351,18 +430,68 @@ class SleeperTUI(App):
                 except:
                     pass
 
-            self.content.update("Cache refreshed!")
-        except AttributeError as e:
-            self.content.update("No league loaded to refresh.")
+            self._replace_content_text("Cache refreshed!")
+        except AttributeError:
+            self._replace_content_text("No league loaded to refresh.")
+
+    # Helper methods -------------------------------------------------------
+
+    def _replace_content_widget(self, new_widget):
+        """Replace the content widget with a new widget."""
+        # Get the content container and replace all its children
+        content_container = self.query_one("#content_container")
+
+        # Remove all existing children
+        content_container.remove_children()
+
+        # Mount the new widget
+        new_widget.id = "content"
+        content_container.mount(new_widget)
+
+    def _replace_content_text(self, text: str):
+        """Replace the content widget with a Static text widget."""
+        new_content = Static(text)
+        self._replace_content_widget(new_content)
 
 
 # --------------------------
 # Launcher
 # --------------------------
 
+
 def main():
-    sleeper = SleeperTUI(title="Sleeper Fantasy Football TUI", league_id="")
-    sleeper.run()
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="Sleeper Fantasy Football TUI")
+    parser.add_argument("--id", dest="league_id", required=False, help="League ID to load directly")
+    parser.add_argument("--user", dest="username", required=False, help="Sleeper username to search leagues")
+    args = parser.parse_args()
+
+    if args.league_id and args.username:
+        print("Error: Cannot specify both --id and --user")
+        sys.exit(1)
+
+    league_id = None
+
+    # If league ID provided, validate and use it
+    if args.league_id:
+        try:
+            int(args.league_id)
+            league_id = args.league_id
+        except ValueError:
+            print("Error: League ID must be numeric")
+            sys.exit(1)
+    # If username provided, we still need to show the lookup screen
+    # but could pre-populate the username field (future enhancement)
+
+    # If no league_id from args, show lookup screen
+    if not league_id:
+        lookup_app = LeagueLookupScreen(league_id=league_id)
+        league_id = lookup_app.run()
+
+    # If we got a league_id (either from args or lookup), start main app
+    if league_id:
+        sleeper = SleeperTUI(title="Sleeper Fantasy Football TUI", league_id=league_id)
+        sleeper.run()
 
 
 if __name__ == "__main__":
