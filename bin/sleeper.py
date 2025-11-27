@@ -323,8 +323,9 @@ class SleeperTUI(App):
     def on_mount(self):
         self.setup_navigation()
 
-        # Always auto-refresh cache on first load
-        self.action_refresh_data()
+        # Auto-refresh cache only if missing or older than 6 days
+        if self._cache_is_stale():
+            self.action_refresh_data()
 
     def setup_navigation(self):
         # Hide the root and add items directly
@@ -342,6 +343,18 @@ class SleeperTUI(App):
     def _has_cache(self):
         """Check if cache exists for this league."""
         return cache_path(f"league_{self.league_id}").exists()
+
+    def _cache_is_stale(self):
+        """Check if cache is older than 6 days."""
+        cache_file = cache_path(f"league_{self.league_id}")
+        if not cache_file.exists():
+            return True
+
+        # Check file modification time
+        import time
+
+        file_age_days = (time.time() - cache_file.stat().st_mtime) / (60 * 60 * 24)
+        return file_age_days > 6
 
     # Navigation events ----------------------------------------------------
 
@@ -409,12 +422,12 @@ class SleeperTUI(App):
     # Matchups selection ---------------------------------------------------
 
     def show_matchups_selector(self):
-        # interactive dropdown
-        container = Container()
+        # Create container with select widget as child
         select = Select(options=[(str(i), i) for i in range(1, 19)], prompt="Select Week", id="week_select")
-        container.mount(select)
         self.week_select = select
 
+        # Create a vertical container with the select inside
+        container = Vertical(select)
         self._replace_content_widget(container)
 
     def on_select_changed(self, event: Select.Changed):
@@ -427,12 +440,16 @@ class SleeperTUI(App):
 
     def show_matchups(self, week: int):
         data = self.api.matchups(week)
+
+        # Build roster_id to owner mapping
+        rosters = self.api.rosters()
         users = {u["user_id"]: u["display_name"] for u in self.api.users()}
+        roster_to_owner = {r["roster_id"]: users.get(r["owner_id"], "Unknown") for r in rosters}
 
         rows = []
         for m in data:
             rows.append([
-                users.get(m["owner_id"], "Unknown"),
+                roster_to_owner.get(m["roster_id"], "Unknown"),
                 json.dumps(m.get("starters", [])),
                 m.get("points", 0),
             ])
