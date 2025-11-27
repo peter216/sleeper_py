@@ -1,4 +1,4 @@
 uv_*
 .uv
-.cache
+cache/
 *.png
