@@ -216,7 +216,7 @@ class LeagueLookupScreen(App):
         # Add new content to the existing container
         container.mount(Label("Select a league:"))
 
-        table = DataTable(id="results_table")
+        table = DataTable(id="results_table", cursor_type="row")
         table.add_column("League Name")
         table.add_column("League ID")
         table.add_column("Season")
@@ -233,7 +233,7 @@ class LeagueLookupScreen(App):
     def on_data_table_row_selected(self, event: DataTable.RowSelected):
         """Handle league selection from table."""
         if hasattr(self, "_leagues"):
-            league = self._leagues[event.row_index]
+            league = self._leagues[event.cursor_row]
             self._load_league(league["league_id"])
 
     def on_button_pressed(self, event: Button.Pressed):
@@ -316,7 +316,7 @@ class SleeperTUI(App):
 
             # Use a container for content that we can replace children in
             with Container(id="content_container"):
-                yield Static("Select an option from the left.", id="content")
+                yield Static("Select an option from the left.")
 
     # App startup ----------------------------------------------------------
 
@@ -461,14 +461,14 @@ class SleeperTUI(App):
 
     def _replace_content_widget(self, new_widget):
         """Replace the content widget with a new widget."""
-        # Get the content container and replace all its children
+        # Get the content container and clear all children, then add new widget
         content_container = self.query_one("#content_container")
 
-        # Remove all existing children
-        content_container.remove_children()
+        # Remove all children (don't wait for async removal)
+        for child in list(content_container.children):
+            child.remove()
 
-        # Mount the new widget
-        new_widget.id = "content"
+        # Mount the new widget (no ID needed since container manages it)
         content_container.mount(new_widget)
 
     def _replace_content_text(self, text: str):
