@@ -62,12 +62,12 @@ def api_get(name: str, url: str, force: bool = False):
 class SleeperAPI:
     def __init__(self, league_id: str):
         try:
-            league_id = int(league_id)
+            validated_id = int(league_id)
         except ValueError:
             print(f"League ID must be an integer string, got {league_id} type {type(league_id)}")
             sys.exit(1)
         else:
-            self.league_id = league_id
+            self.league_id = str(validated_id)
 
     def league(self, force=False):
         return api_get(f"league_{self.league_id}", f"{BASE_URL}/league/{self.league_id}", force)
@@ -147,7 +147,9 @@ class LeagueLookupScreen(App):
                 yield Input(placeholder="League ID", id="league_id_input")
                 yield Button("Load by League ID", id="btn_load_id", variant="primary")
                 yield Label("Option 2: Search by Username")
-                yield Input(placeholder="Sleeper Username", id="username_input")
+                yield Input(
+                    placeholder="Sleeper Username", id="username_input", value=self.username if self.username else ""
+                )
                 yield Input(placeholder="League Name (partial match)", id="league_name_input")
                 yield Button("Search Leagues", id="btn_search", variant="success")
                 yield Static("", id="status")
@@ -155,23 +157,7 @@ class LeagueLookupScreen(App):
     def on_mount(self):
         # If league_id provided, load it directly
         if self.league_id:
-            self._load_league(self.league_id)
-
-    def on_button_pressed(self, event: Button.Pressed):
-        if event.button.id == "btn_load_id":
-            league_id = self.query_one("#league_id_input", Input).value.strip()
-            if league_id:
-                self._load_league(league_id)
-            else:
-                self.query_one("#status", Static).update("Please enter a League ID")
-
-        elif event.button.id == "btn_search":
-            username = self.query_one("#username_input", Input).value.strip()
-            league_name = self.query_one("#league_name_input", Input).value.strip()
-            if username and league_name:
-                self._search_leagues(username, league_name)
-            else:
-                self.query_one("#status", Static).update("Please enter both username and league name")
+            self._load_league(str(self.league_id))
 
     def _load_league(self, league_id: str):
         """Validate and load the league."""
@@ -223,12 +209,12 @@ class LeagueLookupScreen(App):
 
     def _show_search_results(self, leagues):
         """Display search results in a table."""
-        # Replace the form with results table
+        # Get the existing container and clear it
         container = self.query_one(Vertical).query_one(Container)
-        container.remove()
+        container.remove_children()
 
-        new_container = Container()
-        new_container.mount(Label("Select a league:"))
+        # Add new content to the existing container
+        container.mount(Label("Select a league:"))
 
         table = DataTable(id="results_table")
         table.add_column("League Name")
@@ -238,18 +224,51 @@ class LeagueLookupScreen(App):
         for lg in leagues:
             table.add_row(lg["name"], lg["league_id"], str(lg.get("season", "")))
 
-        new_container.mount(table)
-        new_container.mount(Button("Back", id="btn_back"))
-
-        self.query_one(Vertical).mount(new_container)
+        container.mount(table)
+        container.mount(Button("Back", id="btn_back"))
 
         # Store leagues for selection
         self._leagues = leagues
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected):
         """Handle league selection from table."""
-        league = self._leagues[event.row_index]
-        self._load_league(league["league_id"])
+        if hasattr(self, "_leagues"):
+            league = self._leagues[event.row_index]
+            self._load_league(league["league_id"])
+
+    def on_button_pressed(self, event: Button.Pressed):
+        """Handle button presses."""
+        if event.button.id == "btn_load_id":
+            league_id = self.query_one("#league_id_input", Input).value.strip()
+            if league_id:
+                self._load_league(league_id)
+            else:
+                self.query_one("#status", Static).update("Please enter a League ID")
+
+        elif event.button.id == "btn_search":
+            username = self.query_one("#username_input", Input).value.strip()
+            league_name = self.query_one("#league_name_input", Input).value.strip()
+            if username and league_name:
+                self._search_leagues(username, league_name)
+            else:
+                self.query_one("#status", Static).update("Please enter both username and league name")
+
+        elif event.button.id == "btn_back":
+            # Restore the original form
+            container = self.query_one(Vertical).query_one(Container)
+            container.remove_children()
+
+            # Rebuild the original form
+            container.mount(Label("Welcome to Sleeper Fantasy Football TUI", id="title"))
+            container.mount(Label("Choose how to find your league:"))
+            container.mount(Label("Option 1: Enter League ID"))
+            container.mount(Input(placeholder="League ID", id="league_id_input"))
+            container.mount(Button("Load by League ID", id="btn_load_id", variant="primary"))
+            container.mount(Label("Option 2: Search by Username"))
+            container.mount(Input(placeholder="Sleeper Username", id="username_input"))
+            container.mount(Input(placeholder="League Name (partial match)", id="league_name_input"))
+            container.mount(Button("Search Leagues", id="btn_search", variant="success"))
+            container.mount(Static("", id="status"))
 
 
 # --------------------------
@@ -391,19 +410,17 @@ class SleeperTUI(App):
     def show_matchups_selector(self):
         # interactive dropdown
         container = Container()
-        select = Select(
-            options=[(str(i), i) for i in range(1, 19)],
-            prompt="Select Week",
-        )
-        select.on_change = self._on_week_selected
+        select = Select(options=[(str(i), i) for i in range(1, 19)], prompt="Select Week", id="week_select")
         container.mount(select)
         self.week_select = select
 
         self._replace_content_widget(container)
 
-    def _on_week_selected(self, event):
-        week = int(event.value)
-        self.show_matchups(week)
+    def on_select_changed(self, event: Select.Changed):
+        """Handle week selection from dropdown."""
+        if event.select.id == "week_select" and event.value != Select.BLANK:
+            week = int(event.value)
+            self.show_matchups(week)
 
     # View: Matchups -------------------------------------------------------
 
