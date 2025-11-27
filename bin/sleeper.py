@@ -61,8 +61,13 @@ def api_get(name: str, url: str, force: bool = False):
 
 class SleeperAPI:
     def __init__(self, league_id: str):
-        assert int(league_id), "League ID must be an integer string"
-        self.league_id = league_id
+        try:
+            league_id = int(league_id)
+        except ValueError:
+            print(f"League ID must be an integer string, got {league_id} type {type(league_id)}")
+            sys.exit(1)
+        else:
+            self.league_id = league_id
 
     def league(self, force=False):
         return api_get(f"league_{self.league_id}", f"{BASE_URL}/league/{self.league_id}", force)
@@ -128,6 +133,7 @@ class LeagueLookupScreen(App):
     def __init__(self, username: Optional[str] = None):
         super().__init__()
         self.username = username
+        self.league_id = 0
         self.api = SleeperAPI("0")  # Temporary API for user lookup
 
     def compose(self) -> ComposeResult:
@@ -485,7 +491,7 @@ def main():
 
     # If no league_id from args, show lookup screen
     if not league_id:
-        lookup_app = LeagueLookupScreen(league_id=league_id)
+        lookup_app = LeagueLookupScreen(username=args.username)
         league_id = lookup_app.run()
 
     # If we got a league_id (either from args or lookup), start main app
