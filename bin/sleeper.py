@@ -9,7 +9,7 @@ from typing import Optional
 
 import requests
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, Select, Static, Tree
 
 # --------------------------
@@ -90,6 +90,10 @@ class SleeperAPI:
     def user_leagues(self, user_id: str, season: int):
         """Return all NFL leagues the user is in."""
         return fetch(f"{BASE_URL}/user/{user_id}/leagues/nfl/{season}")
+
+    def players(self):
+        """Return all NFL players."""
+        return api_get("nfl_players", f"{BASE_URL}/players/nfl", force=False)
 
 
 # --------------------------
@@ -409,15 +413,25 @@ class SleeperTUI(App):
     def show_rosters(self):
         rosters = self.api.rosters()
         users = {u["user_id"]: u["display_name"] for u in self.api.users()}
+        players_data = self.api.players()
+
+        def format_player_name(player_id):
+            if player_id in players_data:
+                p = players_data[player_id]
+                first = p.get("first_name", "")[0] if p.get("first_name") else ""
+                last = p.get("last_name", "")
+                return f"{first}. {last}" if first and last else player_id
+            return player_id
 
         rows = []
         for r in rosters:
+            player_names = [format_player_name(pid) for pid in r.get("players", [])]
             rows.append([
                 users.get(r["owner_id"], "Unknown"),
-                ",".join(r.get("players", [])),
+                ", ".join(player_names[:10]) + ("..." if len(player_names) > 10 else ""),
             ])
 
-        self.show_table(rows, ["Owner", "Players"])
+        self.show_table(rows, ["Owner", "Players (first 10)"])
 
     # Matchups selection ---------------------------------------------------
 
@@ -440,21 +454,84 @@ class SleeperTUI(App):
 
     def show_matchups(self, week: int):
         data = self.api.matchups(week)
-
-        # Build roster_id to owner mapping
         rosters = self.api.rosters()
         users = {u["user_id"]: u["display_name"] for u in self.api.users()}
+        players_data = self.api.players()
+
+        # Build roster mappings
         roster_to_owner = {r["roster_id"]: users.get(r["owner_id"], "Unknown") for r in rosters}
+        roster_to_team = {r["roster_id"]: r.get("metadata", {}).get("team_name", "Team") for r in rosters}
 
-        rows = []
+        # Get league settings for wins/losses
+        league_data = self.api.league()
+        roster_settings = {r["roster_id"]: r.get("settings", {}) for r in rosters}
+
+        def format_player_name(player_id):
+            if player_id in players_data:
+                p = players_data[player_id]
+                first = p.get("first_name", "")[0] if p.get("first_name") else ""
+                last = p.get("last_name", "")
+                pos = p.get("position", "")
+                return f"{pos}: {first}. {last}" if first and last else player_id
+            # Handle defense
+            if isinstance(player_id, str) and len(player_id) <= 3:
+                return f"D/ST: {player_id}"
+            return player_id
+
+        # Group by matchup_id
+        matchups_by_id = {}
         for m in data:
-            rows.append([
-                roster_to_owner.get(m["roster_id"], "Unknown"),
-                json.dumps(m.get("starters", [])),
-                m.get("points", 0),
-            ])
+            matchup_id = m.get("matchup_id")
+            if matchup_id not in matchups_by_id:
+                matchups_by_id[matchup_id] = []
+            matchups_by_id[matchup_id].append(m)
 
-        self.show_table(rows, ["Owner", "Starters", "Points"])
+        # Build output text
+        output_lines = [f"Week {week} Matchups\n"]
+
+        for matchup_id, teams in matchups_by_id.items():
+            if len(teams) != 2:
+                continue
+
+            team1, team2 = teams[0], teams[1]
+            owner1 = roster_to_owner.get(team1["roster_id"], "Unknown")
+            owner2 = roster_to_owner.get(team2["roster_id"], "Unknown")
+
+            # Get records
+            settings1 = roster_settings.get(team1["roster_id"], {})
+            settings2 = roster_settings.get(team2["roster_id"], {})
+            record1 = f"{settings1.get('wins', 0)}-{settings1.get('losses', 0)}"
+            record2 = f"{settings2.get('wins', 0)}-{settings2.get('losses', 0)}"
+
+            output_lines.append(f"\n{'=' * 70}")
+            output_lines.append(f"Owner: {owner1:<20} | Owner: {owner2}")
+            output_lines.append(f"Record: {record1:<18} | Record: {record2}")
+            output_lines.append(f"{'-' * 70}")
+
+            # Get starters and points
+            starters1 = team1.get("starters", [])
+            points1 = team1.get("starters_points", [])
+            starters2 = team2.get("starters", [])
+            points2 = team2.get("starters_points", [])
+
+            # Display each starter
+            max_starters = max(len(starters1), len(starters2))
+            for i in range(max_starters):
+                player1 = format_player_name(starters1[i]) if i < len(starters1) else ""
+                pts1 = f"{points1[i]:.1f}" if i < len(points1) else ""
+                player2 = format_player_name(starters2[i]) if i < len(starters2) else ""
+                pts2 = f"{points2[i]:.1f}" if i < len(points2) else ""
+
+                output_lines.append(f"{player1:<25} {pts1:>6} | {player2:<25} {pts2:>6}")
+
+            # Display totals
+            total1 = team1.get("points", 0)
+            total2 = team2.get("points", 0)
+            output_lines.append(f"{'-' * 70}")
+            output_lines.append(f"{'Total Points:':<25} {total1:>6.1f} | {'Total Points:':<25} {total2:>6.1f}")
+
+        # Display as static text
+        self._replace_content_text("\n".join(output_lines))
 
     # Refresh --------------------------------------------------------------
 
@@ -491,8 +568,10 @@ class SleeperTUI(App):
 
     def _replace_content_text(self, text: str):
         """Replace the content widget with a Static text widget."""
-        new_content = Static(text)
-        self._replace_content_widget(new_content)
+        # Use a vertical container to allow scrolling for long text
+
+        container = VerticalScroll(Static(text))
+        self._replace_content_widget(container)
 
 
 # --------------------------
