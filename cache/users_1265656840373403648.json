@@ -1,0 +1,118 @@
+[
+  {
+    "avatar": "9af8f99085b236fa6c6d169b66122251",
+    "display_name": "Boliever12",
+    "is_bot": false,
+    "is_owner": true,
+    "league_id": "1265656840373403648",
+    "metadata": {
+      "allow_pn": "on",
+      "mention_pn": "on",
+      "team_name": "The Lampshades "
+    },
+    "settings": null,
+    "user_id": "655895611014463488"
+  },
+  {
+    "avatar": "e94d71eaf1eeca4acd56c5d7c39ff421",
+    "display_name": "martiangoblin",
+    "is_bot": false,
+    "is_owner": true,
+    "league_id": "1265656840373403648",
+    "metadata": {
+      "allow_pn": "on",
+      "avatar": "https://sleepercdn.com/uploads/5085bb2083c39456125faf09443d543a.jpg",
+      "mention_pn": "on",
+      "team_name": "Yoshimi & the Pink Robots"
+    },
+    "settings": null,
+    "user_id": "1019412572271611904"
+  },
+  {
+    "avatar": "4f4090e5e9c3941414db40a871e3e909",
+    "display_name": "Rich7Barb",
+    "is_bot": false,
+    "is_owner": false,
+    "league_id": "1265656840373403648",
+    "metadata": {
+      "allow_pn": "on",
+      "allow_sms": "on",
+      "mention_pn": "on",
+      "team_name": "EP\u2019s"
+    },
+    "settings": null,
+    "user_id": "1138717827609399296"
+  },
+  {
+    "avatar": "8eb8f8bf999945d523f2c4033f70473e",
+    "display_name": "Alan81Alan",
+    "is_bot": false,
+    "is_owner": false,
+    "league_id": "1265656840373403648",
+    "metadata": {
+      "allow_pn": "on",
+      "avatar": "https://sleepercdn.com/uploads/d8296afef11938b01f53f5c67666c186.jpg",
+      "mention_pn": "on",
+      "team_name": "Bare Bodkins"
+    },
+    "settings": null,
+    "user_id": "1138720166659489792"
+  },
+  {
+    "avatar": "b26b9235825635660d7a9041ea97d062",
+    "display_name": "HeidiHalf",
+    "is_bot": false,
+    "is_owner": true,
+    "league_id": "1265656840373403648",
+    "metadata": {
+      "allow_pn": "on",
+      "mention_pn": "on",
+      "team_name": "Dilly Dalliers"
+    },
+    "settings": null,
+    "user_id": "1138721689872203776"
+  },
+  {
+    "avatar": "f0edbf4278f53f9425db175073df6584",
+    "display_name": "AwesomeAbe77",
+    "is_bot": false,
+    "is_owner": false,
+    "league_id": "1265656840373403648",
+    "metadata": {
+      "allow_pn": "on",
+      "mention_pn": "on",
+      "team_name": "Head Tops"
+    },
+    "settings": null,
+    "user_id": "1138723612150808576"
+  },
+  {
+    "avatar": "4f4090e5e9c3941414db40a871e3e909",
+    "display_name": "AddieR321",
+    "is_bot": false,
+    "is_owner": false,
+    "league_id": "1265656840373403648",
+    "metadata": {
+      "allow_pn": "on",
+      "mention_pn": "on",
+      "team_name": "Crisp Pix"
+    },
+    "settings": null,
+    "user_id": "1138725055914205184"
+  },
+  {
+    "avatar": "c6ed5c92c3d518b7f8529760036c2090",
+    "display_name": "PrincessLaya11",
+    "is_bot": false,
+    "is_owner": false,
+    "league_id": "1265656840373403648",
+    "metadata": {
+      "allow_pn": "on",
+      "avatar": "https://sleepercdn.com/uploads/dbb2e5cd960a57e8a656e1ba91107d84.jpg",
+      "mention_pn": "on",
+      "team_name": "Southpaws"
+    },
+    "settings": null,
+    "user_id": "1138726248787046400"
+  }
+]

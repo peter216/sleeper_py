@@ -323,22 +323,28 @@ class SleeperTUI(App):
     def on_mount(self):
         self.setup_navigation()
 
-        if self.is_tuesday():
+        # Auto-refresh cache on first load or if it's Tuesday
+        if self.is_tuesday() or not self._has_cache():
             self.action_refresh_data()
 
     def setup_navigation(self):
         rootname = "Navigation"
         root = self.nav.root
         root.label = rootname
-        root.add("League Info")
-        root.add("Users")
-        root.add("Rosters")
-        root.add("Matchups")
-        root.add("Refresh Cache")
+        # Add leaf nodes (allow_expand=False makes them selectable)
+        root.add_leaf("League Info")
+        root.add_leaf("Users")
+        root.add_leaf("Rosters")
+        root.add_leaf("Matchups")
+        root.add_leaf("Refresh Cache")
         root.expand()
 
     def is_tuesday(self):
         return datetime.datetime.now().strftime("%A") == "Tuesday"
+
+    def _has_cache(self):
+        """Check if cache exists for this league."""
+        return cache_path(f"league_{self.league_id}").exists()
 
     # Navigation events ----------------------------------------------------
 
