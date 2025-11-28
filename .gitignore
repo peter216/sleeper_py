@@ -3,3 +3,6 @@ uv_*
 cache/
 *.png
 example_game.txt
+ipy_sess*
+__pycache__/
+*.bak
